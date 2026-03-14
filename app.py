@@ -1,17 +1,17 @@
 import streamlit as st
 import os
-from dotenv import load_dotenv
 from google import genai
 
-# 1. Setup
-load_dotenv()
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+# 1. Setup - This line is the "Bridge"
+api_key = st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
-st.set_page_config(page_title="GITAM AI Assistant", page_icon="🎓")
-st.title("🎓 GITAM University AI")
-st.markdown("Ask me anything about admissions, fees, or campuses!")
+if not api_key:
+    st.error("🔑 API Key Missing! Please add GOOGLE_API_KEY to Streamlit Secrets.")
+    st.stop()
 
-# 2. Load Knowledge
+client = genai.Client(api_key=api_key)
+
+# 2. Load Knowledge (The small version you made)
 @st.cache_data
 def load_knowledge():
     with open("gitam_data.md", "r", encoding="utf-8") as f:
@@ -19,26 +19,26 @@ def load_knowledge():
 
 knowledge = load_knowledge()
 
-# 3. Chat Interface
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# 3. Chat Logic
+st.title("🎓 GITAM University AI")
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-if prompt := st.chat_input("How can I help you today?"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+if prompt := st.chat_input("Ask me about GITAM..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # RAG Logic
-    rules = "Answer in 2-3 lines using ONLY the context. If unknown, give GITAM's contact email."
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=f"{rules}\n\nContext: {knowledge}\n\nQuestion: {prompt}"
-    )
-    
     with st.chat_message("assistant"):
-        st.markdown(response.text)
-    st.session_state.messages.append({"role": "assistant", "content": response.text})
+        try:
+            # We use gemini-1.5-flash for the best stability on Free Tier
+            response = client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=f"Context: {knowledge}\n\nQuestion: {prompt}\n\nAnswer in 2 lines."
+            )
+            st.markdown(response.text)
+        except Exception as e:
+            # This catches the ClientError and tells you WHY
+            if "429" in str(e):
+                st.warning("⏱️ Quota reached! Please wait 1 minute.")
+            elif "403" in str(e):
+                st.error("🚫 API Key is invalid or restricted.")
+            else:
+                st.error(f"Error: {e}")
