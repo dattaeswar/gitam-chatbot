@@ -1,0 +1,5 @@
+.env
+__pycache__/
+*.pyc
+gitam_data.md
+gitam_chunks.txt
